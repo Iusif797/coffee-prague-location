@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="cs">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#17130f" />
+    <meta
+      name="description"
+      content="Filmový příběh kávy — od prvního pohledu až po poslední doušek."
+    />
+    <title>Teplé světlo — kavárna</title>
+  </head>
+  <body>
+    <main>
+      <header class="masthead">
+        <a
+          class="wordmark"
+          href="#coffee-story"
+          aria-label="Teplé světlo — na začátek"
+          data-i18n-label="brandHomeLabel"
+        >
+          <span data-i18n="brandTop">Teplé</span>
+          <span data-i18n="brandBottom">světlo</span>
+        </a>
+        <nav class="site-nav" aria-label="Hlavní navigace" data-i18n-label="navLabel">
+          <a href="#coffee-story" data-i18n="navStory">Příběh</a>
+          <a href="#afterword" data-i18n="navPhilosophy">Filozofie</a>
+          <a class="header-menu-link" href="#menu" data-i18n="navMenu">Menu</a>
+        </nav>
+        <div class="language-switch" role="group" aria-label="Vyberte jazyk" data-i18n-label="languageLabel">
+          <button type="button" data-language="cs" aria-pressed="true">CZ</button>
+          <button type="button" data-language="en" aria-pressed="false">EN</button>
+          <button type="button" data-language="ru" aria-pressed="false">RU</button>
+        </div>
+      </header>
+
+      <section
+        class="story"
+        id="coffee-story"
+        aria-label="Filmový příběh kávy"
+        data-i18n-label="storyLabel"
+      >
+        <div class="stage">
+          <img
+            class="fallback-poster"
+            src="./frames/frame_00001.jpg"
+            alt="Hostka v útulné kavárně"
+            data-i18n-alt="posterAlt"
+          />
+          <canvas id="coffee-canvas" aria-hidden="true"></canvas>
+          <div class="shade" aria-hidden="true"></div>
+
+          <div class="hero-copy" id="hero-copy">
+            <p class="eyebrow" data-i18n="heroEyebrow">Příběh v každém doušku</p>
+            <h1 data-i18n-html="heroTitle">Káva, kterou<br />chcete cítit</h1>
+            <p class="subtitle" data-i18n="heroSubtitle">Každý záběr přináší nový zážitek</p>
+          </div>
+
+          <div class="scroll-cue" id="scroll-cue" aria-hidden="true">
+            <span data-i18n="scrollCue">Posuňte se a prožijte příběh</span>
+            <i></i>
+          </div>
+
+          <div class="load-status" id="load-status" role="status" aria-live="polite">
+            <span id="load-label" data-i18n="loadingPrepare">Připravujeme příběh</span>
+            <span class="load-track"><i id="load-bar"></i></span>
+          </div>
+
+          <div class="frame-rail" aria-hidden="true">
+            <span id="frame-rail-progress"></span>
+          </div>
+        </div>
+      </section>
+
+      <section class="afterword" id="afterword" aria-labelledby="afterword-title">
+        <div class="afterword-inner" data-reveal>
+          <p class="afterword-kicker" data-i18n="afterKicker">Teplé světlo · čerstvé pražení</p>
+          <h2 id="afterword-title" data-i18n="afterTitle">Stvořeno pro opravdové milovníky kávy</h2>
+          <p class="afterword-copy" data-i18n="afterCopy">
+            Tiché ráno, přesné mletí a několik minut jen pro vás. Pečlivě spojujeme vše,
+            z čeho vzniká váš oblíbený rituál.
+          </p>
+          <div class="details" aria-label="Naše principy" data-i18n-label="principlesLabel">
+            <span data-i18n="principleOne">Výběrová zrna</span>
+            <span data-i18n="principleTwo">Šetrné pražení</span>
+            <span data-i18n="principleThree">Precizní příprava</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="menu" id="menu" aria-labelledby="menu-title">
+        <div class="menu-heading" data-reveal>
+          <div>
+            <p class="menu-kicker" data-i18n="menuKicker">Autorská kolekce · 2026</p>
+            <h2 id="menu-title" data-i18n-html="menuTitle">Káva s<br /><em>charakterem</em></h2>
+          </div>
+          <p class="menu-lead" data-i18n="menuLead">
+            Čtyři nápoje pro pomalá setkání. Známé chutě, čerstvé pražení a jeden
+            nečekaný tón v každém šálku.
+          </p>
+        </div>
+
+        <div class="menu-grid">
+          <article class="menu-card" data-reveal>
+            <figure class="menu-visual">
+              <img
+                src="./menu/pistachio-latte.jpg"
+                alt="Pistáciové latté v keramickém šálku"
+                data-i18n-alt="pistachioAlt"
+                loading="lazy"
+                decoding="async"
+              />
+              <span>01</span>
+            </figure>
+            <div class="menu-card-copy">
+              <div>
+                <h3 data-i18n="pistachioName">Pistáciové latté</h3>
+                <p data-i18n="pistachioDescription">Dvojité espresso · pistáciový krém · mléko</p>
+              </div>
+              <strong>139 Kč</strong>
+            </div>
+          </article>
+
+          <article class="menu-card" data-reveal>
+            <figure class="menu-visual">
+              <img
+                src="./menu/caramel-flat-white.jpg"
+                alt="Flat white se slaným karamelem v tmavém šálku"
+                data-i18n-alt="caramelAlt"
+                loading="lazy"
+                decoding="async"
+              />
+              <span>02</span>
+            </figure>
+            <div class="menu-card-copy">
+              <div>
+                <h3 data-i18n="caramelName">Slaný karamel</h3>
+                <p data-i18n="caramelDescription">Flat white · domácí karamel · mořská sůl</p>
+              </div>
+              <strong>135 Kč</strong>
+            </div>
+          </article>
+
+          <article class="menu-card" data-reveal>
+            <figure class="menu-visual">
+              <img
+                src="./menu/orange-mocha.jpg"
+                alt="Pomerančová moka v průhledné sklenici"
+                data-i18n-alt="mochaAlt"
+                loading="lazy"
+                decoding="async"
+              />
+              <span>03</span>
+            </figure>
+            <div class="menu-card-copy">
+              <div>
+                <h3 data-i18n="mochaName">Pomerančová moka</h3>
+                <p data-i18n="mochaDescription">Espresso · hořká čokoláda · pomerančová kůra</p>
+              </div>
+              <strong>145 Kč</strong>
+            </div>
+          </article>
+
+          <article class="menu-card" data-reveal>
+            <figure class="menu-visual">
+              <img
+                src="./menu/espresso-tonic.jpg"
+                alt="Espresso tonic s ledem a grapefruitem"
+                data-i18n-alt="tonicAlt"
+                loading="lazy"
+                decoding="async"
+              />
+              <span>04</span>
+            </figure>
+            <div class="menu-card-copy">
+              <div>
+                <h3 data-i18n="tonicName">Espresso tonic</h3>
+                <p data-i18n="tonicDescription">Výběrové espresso · tonic · grapefruit</p>
+              </div>
+              <strong>129 Kč</strong>
+            </div>
+          </article>
+        </div>
+
+        <p class="menu-note" data-reveal>
+          <span data-i18n="alternativeMilk">Alternativní mléko</span>
+          <strong>+ 15 Kč</strong>
+        </p>
+      </section>
+
+      <footer class="footer" id="contact">
+        <div class="footer-main" data-reveal>
+          <div class="footer-brand">
+            <a
+              class="wordmark footer-wordmark"
+              href="#coffee-story"
+              aria-label="Teplé světlo — na začátek"
+              data-i18n-label="brandHomeLabel"
+            >
+              <span data-i18n="brandTop">Teplé</span>
+              <span data-i18n="brandBottom">světlo</span>
+            </a>
+            <p data-i18n="footerTagline">Káva, kvůli které stojí za to zpomalit.</p>
+          </div>
+
+          <div class="footer-column">
+            <p class="footer-label" data-i18n="footerVisit">Navštivte nás</p>
+            <address>
+              <span data-i18n="footerAddress">Kávová 24, Praha 2</span>
+              <span>120 00</span>
+            </address>
+          </div>
+
+          <div class="footer-column">
+            <p class="footer-label" data-i18n="footerHours">Otevírací doba</p>
+            <p data-i18n="footerWeekdays">Po–Pá · 08:00–20:00</p>
+            <p data-i18n="footerWeekend">So–Ne · 09:00–20:00</p>
+          </div>
+
+          <div class="footer-column">
+            <p class="footer-label" data-i18n="footerContact">Kontakt</p>
+            <a href="tel:+420777000000">+420 777 000 000</a>
+            <a href="mailto:hello@teplysvet.example">hello@teplysvet.example</a>
+          </div>
+        </div>
+
+        <div class="footer-bottom">
+          <p data-i18n="footerLegal">© 2026 Teplé světlo. Všechna práva vyhrazena.</p>
+          <a href="#coffee-story" data-i18n="footerBack">Nahoru ↑</a>
+        </div>
+      </footer>
+    </main>
+
+    <noscript>
+      <p class="no-script" data-i18n="noScript">Zapněte JavaScript, abyste mohli příběh sledovat v pohybu.</p>
+    </noscript>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
