@@ -89,7 +89,6 @@ const start = async (): Promise<void> => {
       return;
     }
 
-    document.body.classList.add('is-ready');
     const sequence = new ScrollSequence(
       {
         canvas,
@@ -101,11 +100,26 @@ const start = async (): Promise<void> => {
       frames,
     );
     sequence.start();
+    window.requestAnimationFrame(() => {
+      document.body.classList.add('is-ready');
+      const poster = document.querySelector<HTMLImageElement>('.fallback-poster');
+      window.setTimeout(
+        () => poster?.remove(),
+        window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 850,
+      );
+    });
 
-    const initialCount = Math.min(manifest.count, window.innerWidth < 700 ? 8 : 11);
+    const mobileProfile = window.innerWidth < 820 || window.matchMedia('(pointer: coarse)').matches;
+    const initialCount = Math.min(manifest.count, mobileProfile ? 6 : 11);
     const initialFrames = Array.from({ length: initialCount }, (_, index) => index);
-    await frames.loadBatch(initialFrames, 2);
-    void frames.preloadAll();
+    await frames.loadBatch(initialFrames, mobileProfile ? 1 : 2);
+
+    if (mobileProfile) {
+      updateLoading(manifest.count, manifest.count, 0);
+      frames.onProgress = null;
+    } else {
+      void frames.preloadAll();
+    }
   } catch (error) {
     console.error(error);
     showFallback('fallbackStart');

@@ -21,6 +21,7 @@ body {
   min-width: 320px;
   margin: 0;
   overflow-x: hidden;
+  overscroll-behavior-x: none;
 }
 
 body,
@@ -44,6 +45,7 @@ a {
   overflow: hidden;
   isolation: isolate;
   contain: paint;
+  touch-action: pan-y;
   background: #17130f;
 }
 
@@ -54,10 +56,11 @@ a {
   inset: 0;
   width: 100%;
   height: 100%;
+  pointer-events: none;
 }
 
 #coffee-canvas {
-  z-index: -3;
+  z-index: 1;
   opacity: 0;
   contain: strict;
   transition: opacity 700ms cubic-bezier(0.22, 1, 0.36, 1);
@@ -68,13 +71,18 @@ a {
 }
 
 .fallback-poster {
-  z-index: -4;
+  z-index: 0;
   object-fit: cover;
   object-position: center;
+  transition: opacity 500ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.is-ready .fallback-poster {
+  opacity: 0;
 }
 
 .shade {
-  z-index: -2;
+  z-index: 2;
   background:
     linear-gradient(90deg, rgba(12, 9, 7, 0.72) 0%, rgba(12, 9, 7, 0.34) 39%, rgba(12, 9, 7, 0.04) 74%),
     linear-gradient(180deg, rgba(11, 8, 6, 0.35) 0%, transparent 32%, transparent 64%, rgba(11, 8, 6, 0.44) 100%);
@@ -198,7 +206,7 @@ a {
   --copy-opacity: 1;
   --copy-shift: 0px;
   position: absolute;
-  z-index: 2;
+  z-index: 3;
   top: 49%;
   left: clamp(24px, 7.6vw, 122px);
   width: min(720px, 72vw);
@@ -243,7 +251,7 @@ h1 {
 
 .scroll-cue {
   position: absolute;
-  z-index: 2;
+  z-index: 3;
   bottom: max(28px, calc(env(safe-area-inset-bottom) + 16px));
   left: 50%;
   display: flex;
@@ -287,7 +295,7 @@ h1 {
 
 .load-status {
   position: absolute;
-  z-index: 3;
+  z-index: 4;
   right: clamp(24px, 4.5vw, 76px);
   bottom: max(30px, calc(env(safe-area-inset-bottom) + 18px));
   display: grid;
@@ -332,7 +340,7 @@ h1 {
 
 .frame-rail {
   position: absolute;
-  z-index: 2;
+  z-index: 3;
   top: 32%;
   right: clamp(10px, 1.6vw, 28px);
   width: 1px;
@@ -555,7 +563,7 @@ h2 {
 
 .footer-main {
   display: grid;
-  grid-template-columns: 1.45fr repeat(3, minmax(150px, 0.55fr));
+  grid-template-columns: minmax(220px, 1.45fr) repeat(3, minmax(140px, 0.55fr));
   gap: clamp(38px, 5vw, 82px);
   width: min(1180px, 100%);
   margin: 0 auto;
@@ -563,15 +571,18 @@ h2 {
 }
 
 .footer-brand {
-  max-width: 290px;
+  min-width: 0;
+  max-width: 340px;
 }
 
 .footer-brand > p {
   margin: 34px 0 0;
+  max-width: 22ch;
   color: rgba(255, 250, 242, 0.5);
   font-family: Georgia, "Times New Roman", serif;
   font-size: clamp(18px, 1.7vw, 24px);
-  line-height: 1.35;
+  line-height: 1.4;
+  text-wrap: pretty;
 }
 
 .footer-column {
@@ -716,15 +727,24 @@ h2 {
     object-position: 58% center;
   }
 
+  #coffee-canvas,
+  .fallback-poster {
+    transition: none;
+  }
+
   .masthead {
-    top: 10px;
+    top: max(10px, env(safe-area-inset-top));
     width: calc(100% - 20px);
-    min-height: 60px;
-    padding: 7px 8px 7px 17px;
+    min-height: 64px;
+    gap: 4px;
+    padding: 6px 7px 6px 14px;
   }
 
   .masthead > .wordmark {
     flex: 0 0 auto;
+    justify-content: center;
+    min-width: 58px;
+    min-height: 44px;
     font-size: 15px;
   }
 
@@ -743,35 +763,37 @@ h2 {
   }
 
   .site-nav .header-menu-link {
-    display: block;
-    padding: 10px 14px;
+    display: grid;
+    min-height: 44px;
+    padding: 0 14px;
     font-size: 8px;
+    place-items: center;
   }
 
   .language-switch {
     flex: 0 0 auto;
     gap: 0;
-    margin-left: 7px;
+    margin-left: 4px;
     padding: 2px;
   }
 
   .language-switch button {
-    min-width: 27px;
-    height: 30px;
-    padding: 0 5px;
+    min-width: 31px;
+    height: 44px;
+    padding: 0 6px;
     font-size: 7px;
   }
 
   .hero-copy {
     top: auto;
-    bottom: 15%;
-    left: 22px;
-    width: calc(100% - 44px);
+    bottom: clamp(112px, 15svh, 142px);
+    left: 20px;
+    width: calc(100% - 40px);
     transform: translateY(var(--copy-shift));
   }
 
   h1 {
-    font-size: clamp(43px, 13.6vw, 66px);
+    font-size: clamp(43px, 13.2vw, 58px);
     line-height: 0.93;
   }
 
@@ -782,8 +804,8 @@ h2 {
 
   .scroll-cue {
     right: auto;
-    bottom: 24px;
-    left: 22px;
+    bottom: max(22px, calc(env(safe-area-inset-bottom) + 14px));
+    left: 20px;
     align-items: flex-start;
     transform: none;
   }
@@ -799,8 +821,8 @@ h2 {
   }
 
   .load-status {
-    right: 22px;
-    bottom: 24px;
+    right: 20px;
+    bottom: max(22px, calc(env(safe-area-inset-bottom) + 14px));
     width: 104px;
   }
 
@@ -810,11 +832,11 @@ h2 {
 
   .afterword {
     min-height: 86svh;
-    padding: 90px 22px;
+    padding: 96px 20px 88px;
   }
 
   h2 {
-    font-size: clamp(48px, 15vw, 72px);
+    font-size: clamp(46px, 14.5vw, 64px);
   }
 
   .afterword-copy {
@@ -827,17 +849,24 @@ h2 {
   }
 
   .menu {
-    padding: 100px 22px 90px;
+    padding: 94px 20px 88px;
   }
 
   .menu-heading {
     grid-template-columns: 1fr;
-    gap: 38px;
-    margin-bottom: 72px;
+    gap: 32px;
+    margin-bottom: 62px;
   }
 
   .menu h2 {
-    font-size: clamp(61px, 20vw, 82px);
+    font-size: clamp(60px, 19vw, 78px);
+    line-height: 0.86;
+  }
+
+  .menu h2 em {
+    display: inline-block;
+    font-size: 0.7em;
+    line-height: 1.05;
   }
 
   .menu-lead {
@@ -846,7 +875,7 @@ h2 {
 
   .menu-grid {
     grid-template-columns: 1fr;
-    gap: 72px;
+    gap: 64px;
   }
 
   .menu-card-copy {
@@ -868,11 +897,11 @@ h2 {
   }
 
   .menu-note {
-    margin-top: 90px;
+    margin-top: 80px;
   }
 
   .footer {
-    padding: 82px 22px 28px;
+    padding: 78px 20px max(28px, env(safe-area-inset-bottom));
   }
 
   .footer-main {
@@ -902,6 +931,9 @@ h2 {
   }
 
   .footer-column a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 36px;
     overflow-wrap: anywhere;
   }
 
@@ -930,7 +962,8 @@ h2 {
   }
 
   .language-switch button {
-    min-width: 25px;
+    min-width: 28px;
+    padding-inline: 4px;
   }
 
   .hero-copy {
@@ -940,6 +973,12 @@ h2 {
 
   h1 {
     font-size: clamp(40px, 13vw, 52px);
+  }
+}
+
+@media (hover: none) {
+  .menu-visual img {
+    transition: none;
   }
 }
 

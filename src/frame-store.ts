@@ -26,7 +26,12 @@ type DecoderMessage =
   | { type: 'frame'; requestId: number; bitmap: ImageBitmap }
   | { type: 'decode-error'; requestId: number }
   | { type: 'progress'; settled: number; total: number; failed: number }
-  | { type: 'preload-complete' };
+  | { type: 'preload-complete' }
+  | { type: 'fatal' };
+
+const usesMobileProfile = (): boolean => (
+  window.innerWidth < 820 || window.matchMedia('(pointer: coarse)').matches
+);
 
 export async function loadFrameManifest(): Promise<{
   manifest: FrameManifest;
@@ -62,8 +67,11 @@ export class FrameStore {
   private resolvePreload: (() => void) | null = null;
   private focusIndex = 0;
   private focusDirection = 1;
+  private focusInitialized = false;
   private warmGeneration = 0;
   private warming = false;
+  private workerDecodeFailures = 0;
+  private active = true;
   private settled = 0;
   private failed = 0;
   private frameWidth = 1280;
@@ -116,6 +124,10 @@ export class FrameStore {
     try {
       const frame = await promise;
       if (frame) {
+        if (!this.active) {
+          if ('close' in frame && typeof frame.close === 'function') frame.close();
+          return null;
+        }
         this.captureDimensions(frame);
         this.cache.set(safeIndex, frame);
         this.prune();
@@ -158,16 +170,39 @@ export class FrameStore {
   }
 
   warmAround(index: number, direction: number): void {
+    if (!this.active) return;
     const nextIndex = this.clampIndex(index);
     const nextDirection = direction === 0 ? this.focusDirection : direction > 0 ? 1 : -1;
-    if (nextIndex === this.focusIndex && nextDirection === this.focusDirection) return;
+    if (
+      this.focusInitialized
+      && nextIndex === this.focusIndex
+      && nextDirection === this.focusDirection
+    ) return;
 
+    this.focusInitialized = true;
     this.focusIndex = nextIndex;
     this.focusDirection = nextDirection;
     this.warmGeneration += 1;
     this.prune();
+    this.prefetchAhead();
 
     if (!this.warming) void this.runWarmer();
+  }
+
+  setActive(active: boolean): void {
+    if (active === this.active) return;
+    this.active = active;
+    this.warmGeneration += 1;
+
+    if (active) {
+      this.focusInitialized = false;
+      return;
+    }
+
+    for (const frame of this.cache.values()) {
+      if ('close' in frame && typeof frame.close === 'function') frame.close();
+    }
+    this.cache.clear();
   }
 
   nearest(index: number): { image: RenderableFrame; index: number } | null {
@@ -213,6 +248,11 @@ export class FrameStore {
 
   private readonly handleWorkerMessage = (event: MessageEvent<DecoderMessage>): void => {
     const message = event.data;
+    if (message.type === 'fatal') {
+      this.disableWorker();
+      return;
+    }
+
     if (message.type === 'progress') {
       this.settled = message.settled;
       this.failed = message.failed;
@@ -233,7 +273,15 @@ export class FrameStore {
     }
 
     this.workerRequests.delete(message.requestId);
-    request.resolve(message.type === 'frame' ? message.bitmap : null);
+    if (message.type === 'frame') {
+      this.workerDecodeFailures = 0;
+      request.resolve(message.bitmap);
+      return;
+    }
+
+    this.workerDecodeFailures += 1;
+    request.resolve(null);
+    if (this.workerDecodeFailures >= 2) this.disableWorker();
   };
 
   private disableWorker(): void {
@@ -248,13 +296,14 @@ export class FrameStore {
   private async runWarmer(): Promise<void> {
     this.warming = true;
     try {
-      while (true) {
+      while (this.active) {
         const generation = this.warmGeneration;
         const indices = this.warmIndices();
 
-        for (let cursor = 0; cursor < indices.length; cursor += 2) {
+        const batchSize = usesMobileProfile() ? 1 : 2;
+        for (let cursor = 0; cursor < indices.length; cursor += batchSize) {
           if (generation !== this.warmGeneration) break;
-          await Promise.all(indices.slice(cursor, cursor + 2).map((index) => this.load(index)));
+          await Promise.all(indices.slice(cursor, cursor + batchSize).map((index) => this.load(index)));
         }
 
         if (generation === this.warmGeneration) break;
@@ -265,9 +314,9 @@ export class FrameStore {
   }
 
   private warmIndices(): number[] {
-    const mobile = window.innerWidth < 700;
-    const ahead = mobile ? 7 : 10;
-    const behind = mobile ? 3 : 5;
+    const mobile = usesMobileProfile();
+    const ahead = mobile ? 5 : 10;
+    const behind = mobile ? 2 : 5;
     const center = this.focusIndex;
     const indices = [center];
 
@@ -283,6 +332,19 @@ export class FrameStore {
     }
 
     return indices;
+  }
+
+  private prefetchAhead(): void {
+    const lookAhead = usesMobileProfile() ? 18 : 28;
+    const index = this.clampIndex(this.focusIndex + lookAhead * this.focusDirection);
+
+    if (this.decoderWorker) {
+      this.decoderWorker.postMessage({ type: 'prefetch', index });
+      return;
+    }
+
+    const packIndex = this.packIndexByFrame[index];
+    if (packIndex >= 0) void this.ensurePack(packIndex);
   }
 
   private async decodeFrame(index: number): Promise<RenderableFrame | null> {
@@ -452,9 +514,9 @@ export class FrameStore {
   }
 
   private prune(): void {
-    const mobile = window.innerWidth < 700;
-    const ahead = mobile ? 7 : 10;
-    const behind = mobile ? 3 : 5;
+    const mobile = usesMobileProfile();
+    const ahead = mobile ? 5 : 10;
+    const behind = mobile ? 2 : 5;
     let fallbackIndex = -1;
     let fallbackDistance = Number.POSITIVE_INFINITY;
 

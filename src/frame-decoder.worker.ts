@@ -3,13 +3,15 @@ import type { FrameManifest, FramePack } from './frame-store';
 type DecoderRequest =
   | { type: 'init'; manifest: FrameManifest; manifestUrl: string }
   | { type: 'decode'; requestId: number; index: number }
+  | { type: 'prefetch'; index: number }
   | { type: 'preload' };
 
 type DecoderResponse =
   | { type: 'frame'; requestId: number; index: number; bitmap: ImageBitmap }
   | { type: 'decode-error'; requestId: number; index: number }
   | { type: 'progress'; settled: number; total: number; failed: number }
-  | { type: 'preload-complete' };
+  | { type: 'preload-complete' }
+  | { type: 'fatal' };
 
 interface WorkerScope {
   onmessage: ((event: MessageEvent<DecoderRequest>) => void) | null;
@@ -152,9 +154,15 @@ const decodeFrame = async (requestId: number, index: number): Promise<void> => {
 
 const preload = async (): Promise<void> => {
   const packs = manifest?.packs ?? [];
-  for (let packIndex = 0; packIndex < packs.length; packIndex += 1) {
-    await ensurePack(packIndex);
-  }
+  let cursor = 0;
+  const packWorker = async (): Promise<void> => {
+    while (cursor < packs.length) {
+      const packIndex = cursor;
+      cursor += 1;
+      await ensurePack(packIndex);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(2, packs.length) }, packWorker));
   scope.postMessage({ type: 'preload-complete' });
 };
 
@@ -172,11 +180,18 @@ scope.onmessage = (event): void => {
         packIndexByFrame[pack.start + offset] = packIndex;
       }
     });
+    if (typeof createImageBitmap !== 'function') scope.postMessage({ type: 'fatal' });
     return;
   }
 
   if (message.type === 'decode') {
     void decodeFrame(message.requestId, message.index);
+    return;
+  }
+
+  if (message.type === 'prefetch') {
+    const packIndex = packIndexByFrame[message.index];
+    if (packIndex >= 0) void ensurePack(packIndex);
     return;
   }
 

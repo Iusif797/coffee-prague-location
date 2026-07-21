@@ -5,7 +5,9 @@ import { resolve } from 'node:path';
 const framesDirectory = resolve('public/frames');
 const packsDirectory = resolve(framesDirectory, 'packs');
 const framePattern = /^frame_(\d{5})\.jpg$/;
-const framesPerPack = 24;
+// Smaller packs let touch devices begin decoding the next part of the story
+// without waiting for a multi-megabyte response. JPEG bytes stay untouched.
+const framesPerPack = 12;
 const files = (await readdir(framesDirectory))
   .filter((file) => framePattern.test(file))
   .sort((a, b) => a.localeCompare(b));

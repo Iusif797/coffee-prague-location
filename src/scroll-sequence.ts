@@ -22,10 +22,16 @@ export class ScrollSequence {
   private scrollDirection = 1;
   private progress = 0;
   private rafId = 0;
+  private resizeRafId = 0;
   private resizePending = true;
   private lastDrawnIndex = -1;
   private viewportWidth = window.innerWidth;
   private viewportHeight = window.innerHeight;
+  private storyStart = 0;
+  private scrollDistance = 1;
+  private stageHeight = window.innerHeight;
+  private lastLayoutWidth = 0;
+  private sequenceActive = true;
 
   constructor(
     private readonly elements: SequenceElements,
@@ -40,42 +46,66 @@ export class ScrollSequence {
     this.frames.onFrameReady = () => this.scheduleRender();
     window.addEventListener('scroll', this.handleScroll, { passive: true });
     window.addEventListener('resize', this.handleResize, { passive: true });
-    window.addEventListener('orientationchange', this.handleResize, { passive: true });
     this.reducedMotion.addEventListener('change', this.handleMotionPreference);
-    this.updateSectionHeight();
+    this.updateLayoutMetrics();
     this.handleScroll();
   }
 
   private readonly handleScroll = (): void => {
-    const bounds = this.elements.story.getBoundingClientRect();
-    const scrollableDistance = Math.max(1, bounds.height - window.innerHeight);
-    this.progress = clamp01(-bounds.top / scrollableDistance);
-    const nextTargetFrame = this.progress * (this.frames.count - 1);
+    const scrollPosition = window.scrollY;
+    const nextProgress = clamp01((scrollPosition - this.storyStart) / this.scrollDistance);
+    const nextTargetFrame = nextProgress * (this.frames.count - 1);
     const targetDelta = nextTargetFrame - this.targetFrame;
     if (Math.abs(targetDelta) > 0.05) this.scrollDirection = targetDelta > 0 ? 1 : -1;
+    const shouldBeActive = scrollPosition <= this.storyStart + this.scrollDistance + this.stageHeight;
+    const activeChanged = shouldBeActive !== this.sequenceActive;
+    if (activeChanged) {
+      this.sequenceActive = shouldBeActive;
+      this.frames.setActive(shouldBeActive);
+    }
+    if (
+      Math.abs(nextProgress - this.progress) < 0.0001
+      && !this.resizePending
+      && !activeChanged
+    ) return;
+
+    this.progress = nextProgress;
     this.targetFrame = nextTargetFrame;
 
     this.scheduleRender();
   };
 
   private readonly handleResize = (): void => {
-    this.resizePending = true;
-    this.updateSectionHeight();
-    this.handleScroll();
+    // Mobile browser chrome changes innerHeight during a gesture. The sticky
+    // stage uses stable `svh`, so height-only resize events must not rebuild it.
+    if (Math.abs(window.innerWidth - this.lastLayoutWidth) < 2) return;
+    if (this.resizeRafId) return;
+    this.resizeRafId = requestAnimationFrame(() => {
+      this.resizeRafId = 0;
+      this.resizePending = true;
+      this.updateLayoutMetrics();
+      this.handleScroll();
+    });
   };
 
   private readonly handleMotionPreference = (): void => {
     this.scheduleRender();
   };
 
-  private updateSectionHeight(): void {
-    const viewportHeight = window.innerHeight;
-    const naturalDistance = this.frames.count * (window.innerWidth < 700 ? 14 : 16);
+  private updateLayoutMetrics(): void {
+    this.lastLayoutWidth = window.innerWidth;
+    const stage = this.elements.canvas.parentElement;
+    const stageHeight = Math.max(1, stage?.clientHeight ?? window.innerHeight);
+    this.stageHeight = stageHeight;
+    const mobile = window.innerWidth < 820 || window.matchMedia('(pointer: coarse)').matches;
+    const naturalDistance = this.frames.count * (mobile ? 16 : 18);
     const distance = Math.max(
-      viewportHeight * (window.innerWidth < 700 ? 4.2 : 4.5),
-      Math.min(naturalDistance, viewportHeight * 6.5),
+      stageHeight * (mobile ? 4.8 : 4.5),
+      Math.min(naturalDistance, stageHeight * 6.5),
     );
-    this.elements.story.style.height = `${Math.round(viewportHeight + distance)}px`;
+    this.elements.story.style.height = `${Math.round(stageHeight + distance)}px`;
+    this.storyStart = this.elements.story.offsetTop;
+    this.scrollDistance = distance;
   }
 
   private scheduleRender(): void {
@@ -102,8 +132,8 @@ export class ScrollSequence {
   };
 
   private resizeCanvas(): void {
-    this.viewportWidth = window.innerWidth;
-    this.viewportHeight = window.innerHeight;
+    this.viewportWidth = Math.max(1, this.elements.canvas.clientWidth);
+    this.viewportHeight = Math.max(1, this.elements.canvas.clientHeight);
     const sourceWidth = this.frames.sourceWidth;
     const sourceHeight = this.frames.sourceHeight;
     const coverScale = Math.max(
@@ -139,7 +169,8 @@ export class ScrollSequence {
     if (imageRatio > viewportRatio) width = height * imageRatio;
     else height = width / imageRatio;
 
-    const x = (this.viewportWidth - width) / 2;
+    const focalPointX = this.viewportWidth <= 700 ? 0.58 : 0.5;
+    const x = (this.viewportWidth - width) * focalPointX;
     const y = (this.viewportHeight - height) / 2;
     this.context.fillStyle = '#17130f';
     this.context.fillRect(0, 0, this.viewportWidth, this.viewportHeight);
