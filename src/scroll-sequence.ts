@@ -19,7 +19,6 @@ export class ScrollSequence {
   private readonly context: CanvasRenderingContext2D;
   private readonly reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
   private targetFrame = 0;
-  private currentFrame = 0;
   private scrollDirection = 1;
   private progress = 0;
   private rafId = 0;
@@ -56,8 +55,6 @@ export class ScrollSequence {
     if (Math.abs(targetDelta) > 0.05) this.scrollDirection = targetDelta > 0 ? 1 : -1;
     this.targetFrame = nextTargetFrame;
 
-    if (this.reducedMotion.matches) this.currentFrame = this.targetFrame;
-    this.frames.warmAround(this.targetFrame, this.scrollDirection);
     this.scheduleRender();
   };
 
@@ -68,14 +65,16 @@ export class ScrollSequence {
   };
 
   private readonly handleMotionPreference = (): void => {
-    this.currentFrame = this.targetFrame;
     this.scheduleRender();
   };
 
   private updateSectionHeight(): void {
     const viewportHeight = window.innerHeight;
-    const naturalDistance = this.frames.count * (window.innerWidth < 700 ? 7 : 9);
-    const distance = Math.max(viewportHeight * 2.35, Math.min(naturalDistance, viewportHeight * 5));
+    const naturalDistance = this.frames.count * (window.innerWidth < 700 ? 14 : 16);
+    const distance = Math.max(
+      viewportHeight * (window.innerWidth < 700 ? 4.2 : 4.5),
+      Math.min(naturalDistance, viewportHeight * 6.5),
+    );
     this.elements.story.style.height = `${Math.round(viewportHeight + distance)}px`;
   }
 
@@ -87,16 +86,10 @@ export class ScrollSequence {
   private readonly render = (): void => {
     this.rafId = 0;
 
-    if (!this.reducedMotion.matches) {
-      const distance = this.targetFrame - this.currentFrame;
-      this.currentFrame = Math.abs(distance) < 0.015
-        ? this.targetFrame
-        : this.currentFrame + distance * 0.2;
-    }
-
     if (this.resizePending) this.resizeCanvas();
 
-    const frameIndex = Math.round(this.currentFrame);
+    const frameIndex = Math.round(this.targetFrame);
+    this.frames.warmAround(frameIndex, this.scrollDirection);
     const loadedFrame = this.frames.nearest(frameIndex);
     if (loadedFrame && (loadedFrame.index !== this.lastDrawnIndex || this.resizePending)) {
       this.drawCover(loadedFrame.image);
@@ -106,21 +99,32 @@ export class ScrollSequence {
 
     this.updateOverlays();
     this.resizePending = false;
-
-    if (Math.abs(this.targetFrame - this.currentFrame) >= 0.015) {
-      this.scheduleRender();
-    }
   };
 
   private resizeCanvas(): void {
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
     this.viewportWidth = window.innerWidth;
     this.viewportHeight = window.innerHeight;
-    this.elements.canvas.width = Math.round(this.viewportWidth * dpr);
-    this.elements.canvas.height = Math.round(this.viewportHeight * dpr);
+    const sourceWidth = this.frames.sourceWidth;
+    const sourceHeight = this.frames.sourceHeight;
+    const coverScale = Math.max(
+      this.viewportWidth / sourceWidth,
+      this.viewportHeight / sourceHeight,
+    );
+    const sourceLimitedScale = 1 / coverScale;
+    const renderScale = Math.min(window.devicePixelRatio || 1, 2, sourceLimitedScale);
+
+    this.elements.canvas.width = Math.max(1, Math.round(this.viewportWidth * renderScale));
+    this.elements.canvas.height = Math.max(1, Math.round(this.viewportHeight * renderScale));
     this.elements.canvas.style.width = `${this.viewportWidth}px`;
     this.elements.canvas.style.height = `${this.viewportHeight}px`;
-    this.context.setTransform(dpr, 0, 0, dpr, 0, 0);
+    this.context.setTransform(
+      this.elements.canvas.width / this.viewportWidth,
+      0,
+      0,
+      this.elements.canvas.height / this.viewportHeight,
+      0,
+      0,
+    );
     this.lastDrawnIndex = -1;
   }
 

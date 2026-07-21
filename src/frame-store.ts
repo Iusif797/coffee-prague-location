@@ -18,6 +18,16 @@ export type RenderableFrame = ImageBitmap | HTMLImageElement;
 
 type ProgressCallback = (settled: number, total: number, failed: number) => void;
 
+interface WorkerDecodeRequest {
+  resolve: (frame: ImageBitmap | null) => void;
+}
+
+type DecoderMessage =
+  | { type: 'frame'; requestId: number; bitmap: ImageBitmap }
+  | { type: 'decode-error'; requestId: number }
+  | { type: 'progress'; settled: number; total: number; failed: number }
+  | { type: 'preload-complete' };
+
 export async function loadFrameManifest(): Promise<{
   manifest: FrameManifest;
   manifestUrl: string;
@@ -45,13 +55,19 @@ export class FrameStore {
   private readonly pendingPacks = new Map<number, Promise<void>>();
   private readonly packIndexByFrame: Int16Array;
   private readonly status: Uint8Array;
-  private readonly anchorStep: number;
+  private readonly workerRequests = new Map<number, WorkerDecodeRequest>();
+  private decoderWorker: Worker | null = null;
+  private nextWorkerRequestId = 1;
+  private preloadPromise: Promise<void> | null = null;
+  private resolvePreload: (() => void) | null = null;
   private focusIndex = 0;
   private focusDirection = 1;
   private warmGeneration = 0;
   private warming = false;
   private settled = 0;
   private failed = 0;
+  private frameWidth = 1280;
+  private frameHeight = 720;
 
   onProgress: ProgressCallback | null = null;
   onFrameReady: (() => void) | null = null;
@@ -64,17 +80,26 @@ export class FrameStore {
     this.status = new Uint8Array(manifest.count);
     this.packIndexByFrame = new Int16Array(manifest.count);
     this.packIndexByFrame.fill(-1);
-    this.anchorStep = manifest.count > 160 ? 12 : 8;
 
     manifest.packs?.forEach((pack, packIndex) => {
       for (let offset = 0; offset < pack.count; offset += 1) {
         this.packIndexByFrame[pack.start + offset] = packIndex;
       }
     });
+
+    this.initializeWorker();
   }
 
   get count(): number {
     return this.manifest.count;
+  }
+
+  get sourceWidth(): number {
+    return this.frameWidth;
+  }
+
+  get sourceHeight(): number {
+    return this.frameHeight;
   }
 
   async load(index: number): Promise<RenderableFrame | null> {
@@ -91,17 +116,18 @@ export class FrameStore {
     try {
       const frame = await promise;
       if (frame) {
+        this.captureDimensions(frame);
         this.cache.set(safeIndex, frame);
+        this.prune();
         this.onFrameReady?.();
       }
       return frame;
     } finally {
       this.pendingDecodes.delete(safeIndex);
-      this.prune();
     }
   }
 
-  async loadBatch(indices: number[], concurrency = 4): Promise<void> {
+  async loadBatch(indices: number[], concurrency = 2): Promise<void> {
     if (indices.length === 0) return;
     let cursor = 0;
     const worker = async (): Promise<void> => {
@@ -115,37 +141,29 @@ export class FrameStore {
     await Promise.all(Array.from({ length: Math.min(concurrency, indices.length) }, worker));
   }
 
-  async prepareCoverage(): Promise<void> {
-    const anchors: number[] = [];
-    for (let index = 0; index < this.count; index += this.anchorStep) anchors.push(index);
-    if (anchors.at(-1) !== this.count - 1) anchors.push(this.count - 1);
-    await this.loadBatch(anchors, 3);
-  }
-
   async preloadAll(): Promise<void> {
-    const packs = this.manifest.packs ?? [];
-    if (packs.length > 0) {
-      let packCursor = 0;
-      const packWorker = async (): Promise<void> => {
-        while (packCursor < packs.length) {
-          const packIndex = packCursor;
-          packCursor += 1;
-          await this.ensurePack(packIndex);
-        }
-      };
-      await Promise.all(Array.from({ length: Math.min(3, packs.length) }, packWorker));
+    if (this.decoderWorker) {
+      if (this.preloadPromise) return this.preloadPromise;
+      this.preloadPromise = new Promise<void>((resolve) => {
+        this.resolvePreload = resolve;
+      });
+      this.decoderWorker.postMessage({ type: 'preload' });
+      return this.preloadPromise;
     }
 
-    const missing: number[] = [];
-    for (let index = 0; index < this.count; index += 1) {
-      if (!this.blobs[index]) missing.push(index);
+    const packs = this.manifest.packs ?? [];
+    for (let packIndex = 0; packIndex < packs.length; packIndex += 1) {
+      await this.ensurePack(packIndex);
     }
-    await this.fetchIndividualBatch(missing, 3);
   }
 
   warmAround(index: number, direction: number): void {
-    this.focusIndex = this.clampIndex(index);
-    if (direction !== 0) this.focusDirection = direction > 0 ? 1 : -1;
+    const nextIndex = this.clampIndex(index);
+    const nextDirection = direction === 0 ? this.focusDirection : direction > 0 ? 1 : -1;
+    if (nextIndex === this.focusIndex && nextDirection === this.focusDirection) return;
+
+    this.focusIndex = nextIndex;
+    this.focusDirection = nextDirection;
     this.warmGeneration += 1;
     this.prune();
 
@@ -172,6 +190,61 @@ export class FrameStore {
     return nearestImage ? { image: nearestImage, index: nearestIndex } : null;
   }
 
+  private initializeWorker(): void {
+    if (!('Worker' in window) || !('createImageBitmap' in window)) return;
+
+    try {
+      this.decoderWorker = new Worker(
+        new URL('./frame-decoder.worker.ts', import.meta.url),
+        { type: 'module' },
+      );
+      this.decoderWorker.onmessage = this.handleWorkerMessage;
+      this.decoderWorker.onerror = () => this.disableWorker();
+      this.decoderWorker.postMessage({
+        type: 'init',
+        manifest: this.manifest,
+        manifestUrl: this.manifestUrl,
+      });
+    } catch (error) {
+      console.warn('Frame decoder worker is unavailable; using the browser fallback.', error);
+      this.disableWorker();
+    }
+  }
+
+  private readonly handleWorkerMessage = (event: MessageEvent<DecoderMessage>): void => {
+    const message = event.data;
+    if (message.type === 'progress') {
+      this.settled = message.settled;
+      this.failed = message.failed;
+      this.onProgress?.(message.settled, message.total, message.failed);
+      return;
+    }
+
+    if (message.type === 'preload-complete') {
+      this.resolvePreload?.();
+      this.resolvePreload = null;
+      return;
+    }
+
+    const request = this.workerRequests.get(message.requestId);
+    if (!request) {
+      if (message.type === 'frame') message.bitmap.close();
+      return;
+    }
+
+    this.workerRequests.delete(message.requestId);
+    request.resolve(message.type === 'frame' ? message.bitmap : null);
+  };
+
+  private disableWorker(): void {
+    this.decoderWorker?.terminate();
+    this.decoderWorker = null;
+    for (const request of this.workerRequests.values()) request.resolve(null);
+    this.workerRequests.clear();
+    this.resolvePreload?.();
+    this.resolvePreload = null;
+  }
+
   private async runWarmer(): Promise<void> {
     this.warming = true;
     try {
@@ -179,9 +252,9 @@ export class FrameStore {
         const generation = this.warmGeneration;
         const indices = this.warmIndices();
 
-        for (let cursor = 0; cursor < indices.length; cursor += 4) {
+        for (let cursor = 0; cursor < indices.length; cursor += 2) {
           if (generation !== this.warmGeneration) break;
-          await Promise.all(indices.slice(cursor, cursor + 4).map((index) => this.load(index)));
+          await Promise.all(indices.slice(cursor, cursor + 2).map((index) => this.load(index)));
         }
 
         if (generation === this.warmGeneration) break;
@@ -193,8 +266,8 @@ export class FrameStore {
 
   private warmIndices(): number[] {
     const mobile = window.innerWidth < 700;
-    const ahead = mobile ? 18 : 26;
-    const behind = mobile ? 8 : 12;
+    const ahead = mobile ? 7 : 10;
+    const behind = mobile ? 3 : 5;
     const center = this.focusIndex;
     const indices = [center];
 
@@ -212,11 +285,42 @@ export class FrameStore {
     return indices;
   }
 
+  private async decodeFrame(index: number): Promise<RenderableFrame | null> {
+    if (this.decoderWorker) {
+      const decoded = await this.decodeInWorker(index);
+      if (decoded) return decoded;
+    }
+
+    const blob = await this.fetchFrame(index);
+    if (!blob) return null;
+
+    if ('createImageBitmap' in window) {
+      try {
+        return await createImageBitmap(blob);
+      } catch (error) {
+        console.warn('ImageBitmap decode failed; using image fallback.', error);
+      }
+    }
+
+    return this.decodeWithImage(blob);
+  }
+
+  private decodeInWorker(index: number): Promise<ImageBitmap | null> {
+    const worker = this.decoderWorker;
+    if (!worker) return Promise.resolve(null);
+
+    const requestId = this.nextWorkerRequestId;
+    this.nextWorkerRequestId += 1;
+    return new Promise<ImageBitmap | null>((resolve) => {
+      this.workerRequests.set(requestId, { resolve });
+      worker.postMessage({ type: 'decode', requestId, index });
+    });
+  }
+
   private async fetchFrame(index: number): Promise<Blob | null> {
     const cached = this.blobs[index];
     if (cached) return cached;
 
-    // The first frame remains a small standalone request for the fastest first paint.
     if (index === 0) return this.fetchIndividual(index);
 
     const packIndex = this.packIndexByFrame[index];
@@ -234,14 +338,7 @@ export class FrameStore {
 
     const pack = this.manifest.packs?.[packIndex];
     if (!pack) return;
-    let complete = true;
-    for (let offset = 0; offset < pack.count; offset += 1) {
-      if (!this.blobs[pack.start + offset]) {
-        complete = false;
-        break;
-      }
-    }
-    if (complete) return;
+    if (this.blobs[pack.start]) return;
 
     const promise = this.downloadPack(pack);
     this.pendingPacks.set(packIndex, promise);
@@ -264,13 +361,15 @@ export class FrameStore {
         const offset = pack.offsets[localIndex];
         const length = pack.lengths[localIndex];
         this.blobs[frameIndex] = packedBlob.slice(offset, offset + length, 'image/jpeg');
-        this.markSettled(frameIndex, false);
+        this.markSettled(frameIndex, false, false);
       }
+      this.emitProgress();
     } catch (error) {
       console.warn(error);
       for (let localIndex = 0; localIndex < pack.count; localIndex += 1) {
-        this.markSettled(pack.start + localIndex, true);
+        this.markSettled(pack.start + localIndex, true, false);
       }
+      this.emitProgress();
     }
   }
 
@@ -306,34 +405,6 @@ export class FrameStore {
     }
   }
 
-  private async fetchIndividualBatch(indices: number[], concurrency: number): Promise<void> {
-    if (indices.length === 0) return;
-    let cursor = 0;
-    const worker = async (): Promise<void> => {
-      while (cursor < indices.length) {
-        const index = indices[cursor];
-        cursor += 1;
-        await this.fetchIndividual(index);
-      }
-    };
-    await Promise.all(Array.from({ length: Math.min(concurrency, indices.length) }, worker));
-  }
-
-  private async decodeFrame(index: number): Promise<RenderableFrame | null> {
-    const blob = await this.fetchFrame(index);
-    if (!blob) return null;
-
-    if ('createImageBitmap' in window) {
-      try {
-        return await createImageBitmap(blob);
-      } catch (error) {
-        console.warn('ImageBitmap decode failed; using image fallback.', error);
-      }
-    }
-
-    return this.decodeWithImage(blob);
-  }
-
   private async decodeWithImage(blob: Blob): Promise<HTMLImageElement | null> {
     const image = new Image();
     image.decoding = 'async';
@@ -355,12 +426,17 @@ export class FrameStore {
     }
   }
 
-  private markSettled(index: number, failed: boolean): void {
+  private captureDimensions(frame: RenderableFrame): void {
+    this.frameWidth = frame instanceof HTMLImageElement ? frame.naturalWidth : frame.width;
+    this.frameHeight = frame instanceof HTMLImageElement ? frame.naturalHeight : frame.height;
+  }
+
+  private markSettled(index: number, failed: boolean, emit = true): void {
     if (this.status[index] !== 0) {
       if (!failed && this.status[index] === 2) {
         this.status[index] = 1;
         this.failed -= 1;
-        this.onProgress?.(this.settled, this.count, this.failed);
+        if (emit) this.emitProgress();
       }
       return;
     }
@@ -368,19 +444,32 @@ export class FrameStore {
     this.status[index] = failed ? 2 : 1;
     this.settled += 1;
     if (failed) this.failed += 1;
+    if (emit) this.emitProgress();
+  }
+
+  private emitProgress(): void {
     this.onProgress?.(this.settled, this.count, this.failed);
   }
 
   private prune(): void {
     const mobile = window.innerWidth < 700;
-    const ahead = mobile ? 18 : 26;
-    const behind = mobile ? 8 : 12;
+    const ahead = mobile ? 7 : 10;
+    const behind = mobile ? 3 : 5;
+    let fallbackIndex = -1;
+    let fallbackDistance = Number.POSITIVE_INFINITY;
+
+    for (const index of this.cache.keys()) {
+      const distance = Math.abs(index - this.focusIndex);
+      if (distance < fallbackDistance) {
+        fallbackDistance = distance;
+        fallbackIndex = index;
+      }
+    }
 
     for (const [index, frame] of this.cache) {
       const distanceInDirection = (index - this.focusIndex) * this.focusDirection;
-      const isAnchor = index % this.anchorStep === 0 || index === this.count - 1;
       const isNearFocus = distanceInDirection >= -behind && distanceInDirection <= ahead;
-      if (!isAnchor && !isNearFocus) {
+      if (index !== fallbackIndex && !isNearFocus) {
         if ('close' in frame && typeof frame.close === 'function') frame.close();
         this.cache.delete(index);
       }

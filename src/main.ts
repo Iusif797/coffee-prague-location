@@ -102,13 +102,10 @@ const start = async (): Promise<void> => {
     );
     sequence.start();
 
-    const initialCount = Math.min(manifest.count, window.innerWidth < 700 ? 19 : 27);
+    const initialCount = Math.min(manifest.count, window.innerWidth < 700 ? 8 : 11);
     const initialFrames = Array.from({ length: initialCount }, (_, index) => index);
-    await frames.loadBatch(initialFrames, 6);
-    void (async () => {
-      await frames.prepareCoverage();
-      await frames.preloadAll();
-    })();
+    await frames.loadBatch(initialFrames, 2);
+    void frames.preloadAll();
   } catch (error) {
     console.error(error);
     showFallback('fallbackStart');
