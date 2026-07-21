@@ -2,7 +2,7 @@ import type { FrameManifest, FramePack } from './frame-store';
 
 type DecoderRequest =
   | { type: 'init'; manifest: FrameManifest; manifestUrl: string }
-  | { type: 'decode'; requestId: number; index: number }
+  | { type: 'decode'; requestId: number; index: number; individual?: boolean }
   | { type: 'prefetch'; index: number }
   | { type: 'preload' };
 
@@ -140,9 +140,13 @@ const fetchFrame = async (index: number): Promise<Blob | null> => {
   return fetchIndividual(index);
 };
 
-const decodeFrame = async (requestId: number, index: number): Promise<void> => {
+const decodeFrame = async (
+  requestId: number,
+  index: number,
+  individual = false,
+): Promise<void> => {
   try {
-    const blob = await fetchFrame(index);
+    const blob = individual ? await fetchIndividual(index) : await fetchFrame(index);
     if (!blob) throw new Error(`Frame ${index} is unavailable`);
     const bitmap = await createImageBitmap(blob);
     scope.postMessage({ type: 'frame', requestId, index, bitmap }, [bitmap]);
@@ -185,7 +189,7 @@ scope.onmessage = (event): void => {
   }
 
   if (message.type === 'decode') {
-    void decodeFrame(message.requestId, message.index);
+    void decodeFrame(message.requestId, message.index, message.individual);
     return;
   }
 

@@ -1,6 +1,7 @@
 import './styles.css';
 import { FrameStore, loadFrameManifest } from './frame-store';
 import { initializeI18n, translate, type TranslationKey } from './i18n';
+import { initializeMobileNav } from './mobile-nav';
 import { ScrollSequence } from './scroll-sequence';
 
 const requiredElement = <T extends HTMLElement>(selector: string): T => {
@@ -110,6 +111,7 @@ const start = async (): Promise<void> => {
     });
 
     const mobileProfile = window.innerWidth < 820 || window.matchMedia('(pointer: coarse)').matches;
+    if (mobileProfile) void frames.prepareMobileCoverage();
     const initialCount = Math.min(manifest.count, mobileProfile ? 6 : 11);
     const initialFrames = Array.from({ length: initialCount }, (_, index) => index);
     await frames.loadBatch(initialFrames, mobileProfile ? 1 : 2);
@@ -127,6 +129,7 @@ const start = async (): Promise<void> => {
 };
 
 initializeI18n();
+initializeMobileNav();
 window.addEventListener('languagechange', () => {
   updateLoading(latestLoading.settled, latestLoading.total, latestLoading.failed);
 });

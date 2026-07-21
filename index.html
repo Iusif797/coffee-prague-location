@@ -22,17 +22,31 @@
           <span data-i18n="brandTop">Teplé</span>
           <span data-i18n="brandBottom">světlo</span>
         </a>
-        <nav class="site-nav" aria-label="Hlavní navigace" data-i18n-label="navLabel">
-          <a href="#coffee-story" data-i18n="navStory">Příběh</a>
-          <a href="#afterword" data-i18n="navPhilosophy">Filozofie</a>
-          <a class="header-menu-link" href="#menu" data-i18n="navMenu">Menu</a>
-        </nav>
-        <div class="language-switch" role="group" aria-label="Vyberte jazyk" data-i18n-label="languageLabel">
-          <button type="button" data-language="cs" aria-pressed="true">CZ</button>
-          <button type="button" data-language="en" aria-pressed="false">EN</button>
-          <button type="button" data-language="ru" aria-pressed="false">RU</button>
+        <button
+          type="button"
+          class="menu-toggle"
+          aria-expanded="false"
+          aria-controls="masthead-panel"
+          aria-label="Otevřít menu"
+        >
+          <span class="menu-toggle-line" aria-hidden="true"></span>
+          <span class="menu-toggle-line" aria-hidden="true"></span>
+        </button>
+        <div class="masthead-panel" id="masthead-panel">
+          <nav class="site-nav" aria-label="Hlavní navigace" data-i18n-label="navLabel">
+            <a href="#coffee-story" data-i18n="navStory">Příběh</a>
+            <a href="#afterword" data-i18n="navPhilosophy">Filozofie</a>
+            <a href="#menu" data-i18n="navMenu">Menu</a>
+            <a class="nav-contact-link" href="#contact" data-i18n="navContact">Kontakt</a>
+          </nav>
+          <div class="language-switch" role="group" aria-label="Vyberte jazyk" data-i18n-label="languageLabel">
+            <button type="button" data-language="cs" aria-pressed="true">CZ</button>
+            <button type="button" data-language="en" aria-pressed="false">EN</button>
+            <button type="button" data-language="ru" aria-pressed="false">RU</button>
+          </div>
         </div>
       </header>
+      <div class="nav-backdrop" hidden></div>
 
       <section
         class="story"

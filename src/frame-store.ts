@@ -61,6 +61,7 @@ export class FrameStore {
   private readonly packIndexByFrame: Int16Array;
   private readonly status: Uint8Array;
   private readonly workerRequests = new Map<number, WorkerDecodeRequest>();
+  private readonly anchorIndices = new Set<number>();
   private decoderWorker: Worker | null = null;
   private nextWorkerRequestId = 1;
   private preloadPromise: Promise<void> | null = null;
@@ -110,7 +111,7 @@ export class FrameStore {
     return this.frameHeight;
   }
 
-  async load(index: number): Promise<RenderableFrame | null> {
+  async load(index: number, individual = false): Promise<RenderableFrame | null> {
     const safeIndex = this.clampIndex(index);
     const cached = this.cache.get(safeIndex);
     if (cached) return cached;
@@ -118,7 +119,7 @@ export class FrameStore {
     const inFlight = this.pendingDecodes.get(safeIndex);
     if (inFlight) return inFlight;
 
-    const promise = this.decodeFrame(safeIndex);
+    const promise = this.decodeFrame(safeIndex, individual);
     this.pendingDecodes.set(safeIndex, promise);
 
     try {
@@ -167,6 +168,21 @@ export class FrameStore {
     for (let packIndex = 0; packIndex < packs.length; packIndex += 1) {
       await this.ensurePack(packIndex);
     }
+  }
+
+  async prepareMobileCoverage(): Promise<void> {
+    const anchors: number[] = [];
+    for (let index = 40; index < this.count; index += 40) anchors.push(index);
+    if (anchors.at(-1) !== this.count - 1) anchors.push(this.count - 1);
+
+    for (const index of anchors) {
+      this.anchorIndices.add(index);
+    }
+
+    // These six original-quality frames total roughly 0.5 MB. Loading them in
+    // parallel gives a first-time fast flick a nearby visual anchor immediately,
+    // while the exact surrounding pack continues decoding in the worker.
+    await Promise.all(anchors.map((index) => this.load(index, true)));
   }
 
   warmAround(index: number, direction: number): void {
@@ -347,13 +363,13 @@ export class FrameStore {
     if (packIndex >= 0) void this.ensurePack(packIndex);
   }
 
-  private async decodeFrame(index: number): Promise<RenderableFrame | null> {
+  private async decodeFrame(index: number, individual = false): Promise<RenderableFrame | null> {
     if (this.decoderWorker) {
-      const decoded = await this.decodeInWorker(index);
+      const decoded = await this.decodeInWorker(index, individual);
       if (decoded) return decoded;
     }
 
-    const blob = await this.fetchFrame(index);
+    const blob = individual ? await this.fetchIndividual(index) : await this.fetchFrame(index);
     if (!blob) return null;
 
     if ('createImageBitmap' in window) {
@@ -367,7 +383,7 @@ export class FrameStore {
     return this.decodeWithImage(blob);
   }
 
-  private decodeInWorker(index: number): Promise<ImageBitmap | null> {
+  private decodeInWorker(index: number, individual = false): Promise<ImageBitmap | null> {
     const worker = this.decoderWorker;
     if (!worker) return Promise.resolve(null);
 
@@ -375,7 +391,7 @@ export class FrameStore {
     this.nextWorkerRequestId += 1;
     return new Promise<ImageBitmap | null>((resolve) => {
       this.workerRequests.set(requestId, { resolve });
-      worker.postMessage({ type: 'decode', requestId, index });
+      worker.postMessage({ type: 'decode', requestId, index, individual });
     });
   }
 
@@ -530,8 +546,9 @@ export class FrameStore {
 
     for (const [index, frame] of this.cache) {
       const distanceInDirection = (index - this.focusIndex) * this.focusDirection;
+      const isAnchor = this.anchorIndices.has(index);
       const isNearFocus = distanceInDirection >= -behind && distanceInDirection <= ahead;
-      if (index !== fallbackIndex && !isNearFocus) {
+      if (index !== fallbackIndex && !isAnchor && !isNearFocus) {
         if ('close' in frame && typeof frame.close === 'function') frame.close();
         this.cache.delete(index);
       }
