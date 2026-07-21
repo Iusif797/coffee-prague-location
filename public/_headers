@@ -1,0 +1,8 @@
+/frames/packs/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/menu/*
+  Cache-Control: public, max-age=86400, stale-while-revalidate=604800

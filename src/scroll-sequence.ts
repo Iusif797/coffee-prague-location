@@ -1,4 +1,4 @@
-import { FrameStore } from './frame-store';
+import { FrameStore, type RenderableFrame } from './frame-store';
 
 interface SequenceElements {
   canvas: HTMLCanvasElement;
@@ -20,6 +20,7 @@ export class ScrollSequence {
   private readonly reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
   private targetFrame = 0;
   private currentFrame = 0;
+  private scrollDirection = 1;
   private progress = 0;
   private rafId = 0;
   private resizePending = true;
@@ -50,11 +51,13 @@ export class ScrollSequence {
     const bounds = this.elements.story.getBoundingClientRect();
     const scrollableDistance = Math.max(1, bounds.height - window.innerHeight);
     this.progress = clamp01(-bounds.top / scrollableDistance);
-    this.targetFrame = this.progress * (this.frames.count - 1);
+    const nextTargetFrame = this.progress * (this.frames.count - 1);
+    const targetDelta = nextTargetFrame - this.targetFrame;
+    if (Math.abs(targetDelta) > 0.05) this.scrollDirection = targetDelta > 0 ? 1 : -1;
+    this.targetFrame = nextTargetFrame;
 
     if (this.reducedMotion.matches) this.currentFrame = this.targetFrame;
-    this.frames.setFocus(this.targetFrame);
-    void this.frames.loadAround(this.targetFrame, 5);
+    this.frames.warmAround(this.targetFrame, this.scrollDirection);
     this.scheduleRender();
   };
 
@@ -121,8 +124,10 @@ export class ScrollSequence {
     this.lastDrawnIndex = -1;
   }
 
-  private drawCover(image: HTMLImageElement): void {
-    const imageRatio = image.naturalWidth / image.naturalHeight;
+  private drawCover(image: RenderableFrame): void {
+    const sourceWidth = image instanceof HTMLImageElement ? image.naturalWidth : image.width;
+    const sourceHeight = image instanceof HTMLImageElement ? image.naturalHeight : image.height;
+    const imageRatio = sourceWidth / sourceHeight;
     const viewportRatio = this.viewportWidth / this.viewportHeight;
     let width = this.viewportWidth;
     let height = this.viewportHeight;
