@@ -10,8 +10,43 @@
       content="Filmový příběh kávy — od prvního pohledu až po poslední doušek."
     />
     <title>Teplé světlo — kavárna</title>
+    <noscript>
+      <style>
+        .preloader { display: none; }
+        body.is-loading { overflow: auto; }
+      </style>
+    </noscript>
   </head>
-  <body>
+  <body class="is-loading">
+    <div
+      class="preloader"
+      id="preloader"
+      role="status"
+      aria-live="polite"
+      aria-label="Připravujeme příběh"
+      data-i18n-label="loadingPrepare"
+    >
+      <div class="preloader-inner">
+        <p class="preloader-brand" aria-hidden="true">
+          <span data-i18n="brandTop">Teplé</span>
+          <span data-i18n="brandBottom">světlo</span>
+        </p>
+        <div class="preloader-scene" aria-hidden="true">
+          <span class="preloader-steam"></span>
+          <span class="preloader-steam"></span>
+          <span class="preloader-steam"></span>
+          <div class="preloader-cup">
+            <span class="preloader-cup-body"><i class="preloader-coffee"></i></span>
+          </div>
+          <span class="preloader-saucer"></span>
+        </div>
+        <div class="preloader-meter" aria-hidden="true">
+          <p class="preloader-percent"><span id="preloader-percent">0</span><sup>%</sup></p>
+          <span class="preloader-track"><i></i></span>
+          <p class="preloader-caption" data-i18n="loadingPrepare">Připravujeme příběh</p>
+        </div>
+      </div>
+    </div>
     <main>
       <header class="masthead">
         <a

@@ -2,7 +2,13 @@ import './styles.css';
 import { FrameStore, loadFrameManifest } from './frame-store';
 import { initializeI18n, translate, type TranslationKey } from './i18n';
 import { initializeMobileNav } from './mobile-nav';
+import { initializePreloader } from './preloader';
 import { ScrollSequence } from './scroll-sequence';
+
+const HERO_READY_FRACTION = 0.35;
+const PRELOADER_MAX_WAIT_MS = 9000;
+
+const preloader = initializePreloader();
 
 const requiredElement = <T extends HTMLElement>(selector: string): T => {
   const element = document.querySelector<T>(selector);
@@ -11,6 +17,7 @@ const requiredElement = <T extends HTMLElement>(selector: string): T => {
 };
 
 const showFallback = (key: TranslationKey): void => {
+  preloader.dismiss();
   document.body.classList.add('is-fallback');
   const label = requiredElement<HTMLElement>('#load-label');
   const message = translate(key);
@@ -26,6 +33,10 @@ const updateLoading = (
   failed: number,
 ): void => {
   latestLoading = { settled, total, failed };
+  const heroReadiness = total === 0 ? 0 : Math.min(1, settled / (total * HERO_READY_FRACTION));
+  preloader.setProgress(heroReadiness);
+  if (heroReadiness >= 1) preloader.finish();
+
   const status = requiredElement<HTMLElement>('#load-status');
   const label = requiredElement<HTMLElement>('#load-label');
   const bar = requiredElement<HTMLElement>('#load-bar');
@@ -134,4 +145,5 @@ window.addEventListener('languagechange', () => {
   updateLoading(latestLoading.settled, latestLoading.total, latestLoading.failed);
 });
 initializeReveals();
+window.setTimeout(() => preloader.finish(), PRELOADER_MAX_WAIT_MS);
 void start();
